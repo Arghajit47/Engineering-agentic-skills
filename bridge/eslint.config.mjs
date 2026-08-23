@@ -1,0 +1,22 @@
+import globals from "globals";
+import pluginJs from "@eslint/js";
+
+export default [
+  {
+    files: ["**/*.js", "**/*.ts"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+        figma: "readonly",
+        parent: "readonly",
+        __html__: "readonly",
+      },
+    },
+  },
+  pluginJs.configs.recommended,
+  {
+    ignores: ["dist/**", "node_modules/**", "server/dist/**", "server/node_modules/**"],
+  },
+];

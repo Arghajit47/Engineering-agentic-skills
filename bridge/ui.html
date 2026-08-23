@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; font-size: 13px; padding: 12px; background: #1e1e1e; color: #ccc; margin: 0; }
+    #status  { color: #4ade80; margin-bottom: 6px; font-weight: bold; }
+    #jobs    { color: #60a5fa; margin-bottom: 6px; display: none; font-size: 12px; }
+    #error   { color: #f87171; display: none; margin-bottom: 6px; }
+    #log     { font-size: 11px; color: #888; max-height: 120px; overflow-y: auto; font-family: ui-monospace, monospace; }
+    button   { background: #2c2c2c; color: #ccc; border: 1px solid #444; border-radius: 4px;
+               padding: 4px 10px; font-size: 12px; cursor: pointer; margin-bottom: 8px; }
+    button:hover { background: #383838; }
+    button:disabled { opacity: 0.5; cursor: default; }
+  </style>
+</head>
+<body>
+  <div id="status">Waiting for design data...</div>
+  <div id="jobs"></div>
+  <div id="error"></div>
+  <button id="resync">Re-sync page</button>
+  <div id="log"></div>
+
+<script>
+  const SERVER = 'http://localhost:47291';
+
+  const statusEl = document.getElementById('status');
+  const jobsEl   = document.getElementById('jobs');
+  const errorEl  = document.getElementById('error');
+  const logEl    = document.getElementById('log');
+  const resyncEl = document.getElementById('resync');
+
+  let jobsServed = 0;
+  let polling    = false;
+
+  function addLog(msg) {
+    const line = document.createElement('div');
+    line.textContent = msg;
+    logEl.appendChild(line);
+    while (logEl.childNodes.length > 200) logEl.removeChild(logEl.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function showError(msg) {
+    errorEl.style.display = 'block';
+    errorEl.textContent = msg;
+  }
+
+  resyncEl.onclick = () => {
+    resyncEl.disabled = true;
+    statusEl.textContent = 'Re-syncing…';
+    errorEl.style.display = 'none';
+    addLog('Re-sync requested');
+    parent.postMessage({ pluginMessage: { type: 'RESYNC' } }, '*');
+  };
+
+  // ── Messages from the plugin sandbox ──────────────────────────────────────
+  window.onmessage = async (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'HELLO') {
+      addLog(`🔌 plugin build ${msg.build} (${msg.reason})`);
+    } else if (msg.type === 'SYNC_BEGIN') {
+      await post('/api/sync/begin', {
+        variables: msg.variables, styles: msg.styles, pages: msg.pages, meta: msg.meta,
+      }, `begin (${msg.meta.nodeCount} nodes, ${msg.meta.deepMode ? 'deep' : 'light'} mode)`);
+    } else if (msg.type === 'SYNC_NODES') {
+      await post('/api/sync/nodes', { batch: msg.batch });
+    } else if (msg.type === 'SYNC_SHOT') {
+      await post('/api/sync/shot', {
+        id: msg.id, name: msg.name, scale: msg.scale, base64: msg.base64,
+      });
+    } else if (msg.type === 'SYNC_END') {
+      await finishSync(msg);
+    } else if (msg.type === 'SYNC_DATA') {
+      await pushSync(msg);
+    } else if (msg.type === 'SYNC_PROGRESS') {
+      onProgress(msg);
+    } else if (msg.type === 'SYNC_FAILED') {
+      statusEl.textContent = '✗ Sync failed';
+      showError(msg.message || 'Unknown error');
+      addLog(`❌ ${msg.message}`);
+      if (msg.stack) addLog(msg.stack.split('\n').slice(0, 4).join(' | '));
+      addLog(`   (failed after ${msg.nodesSeen || 0} nodes)`);
+      resyncEl.disabled = false;
+    } else if (msg.type === 'JOB_RESULT') {
+      await completeJob(msg);
+    }
+  };
+
+  const STAGE_LABEL = {
+    start:       (d) => `Reading page "${d}"…`,
+    counted:     (d) => `${d} nodes to sync`,
+    variables:   ()  => 'Collecting variables…',
+    styles:      ()  => 'Collecting local styles…',
+    nodes:       (d) => `Streaming nodes… ${d}`,
+    screenshots: (d) => `Exporting frames… ${d}`,
+  };
+
+  function onProgress(msg) {
+    const fmt = STAGE_LABEL[msg.stage];
+    const label = fmt ? fmt(msg.detail) : `${msg.stage} ${msg.detail || ''}`;
+    statusEl.textContent = label;
+    // Batch ticks are frequent; keep them on the status line, out of the log.
+    if (msg.stage !== 'nodes' && msg.stage !== 'screenshots') addLog(label);
+  }
+
+  // ── Streaming sync: POST, then ack so the plugin sends the next chunk ──────
+  function ack() {
+    parent.postMessage({ pluginMessage: { type: 'BATCH_ACK' } }, '*');
+  }
+
+  async function post(pathname, body, logLabel) {
+    try {
+      const res = await fetch(`${SERVER}${pathname}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`${pathname} → HTTP ${res.status}`);
+      if (logLabel) addLog(`✓ ${logLabel}`);
+      errorEl.style.display = 'none';
+      return await res.json();
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      showError(`Sync error: ${m}`);
+      addLog(`❌ ${pathname}: ${m}`);
+      return null;
+    } finally {
+      // Ack regardless — a failed chunk must not stall the whole sync.
+      ack();
+    }
+  }
+
+  async function finishSync(msg) {
+    const result = await post('/api/sync/end', {
+      nodes: msg.nodes, screenshots: msg.screenshots, deepMode: msg.deepMode, cssSkipped: msg.cssSkipped,
+    });
+    if (result && result.status === 'success') {
+      statusEl.textContent = '✓ Synced — serving agent requests';
+      addLog(`✓ committed ${result.nodes} nodes, ${result.nodesWithCss} with CSS, ${msg.screenshots} frames`);
+      if (!msg.deepMode) {
+        addLog('ℹ light mode: per-node CSS on demand via /api/node/:id/context');
+      }
+      jobsEl.style.display = 'block';
+      jobsEl.textContent = `Jobs served: ${jobsServed}`;
+      startPolling();
+    } else {
+      statusEl.textContent = '✗ Sync failed at commit';
+    }
+    resyncEl.disabled = false;
+  }
+
+  // ── Initial / manual sync ─────────────────────────────────────────────────
+  async function pushSync(msg) {
+    const screenshotCount = (msg.screenshots || []).length;
+    const variableCount = (msg.variables || []).reduce((n, c) => n + (c.variables || []).length, 0);
+
+    statusEl.textContent = `Syncing… ${screenshotCount} frames`;
+    addLog(`Tree:      ${JSON.stringify(msg.tree).length} chars`);
+    addLog(`Frames:    ${screenshotCount} @ ${(msg.meta && msg.meta.pngScale) || 1}x`);
+    addLog(`Variables: ${variableCount}`);
+    if (msg.meta && msg.meta.cssSkipped) {
+      addLog(`⚠️ CSS skipped for ${msg.meta.cssSkipped} nodes (budget exhausted)`);
+    }
+
+    try {
+      addLog('POSTing to /api/sync…');
+      const res = await fetch(`${SERVER}/api/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tree: msg.tree,
+          screenshots: msg.screenshots,
+          variables: msg.variables,
+          styles: msg.styles,
+          pages: msg.pages,
+          meta: msg.meta,
+        }),
+      });
+      addLog(`Server: ${res.status}`);
+      if (!res.ok) throw new Error(`Server responded ${res.status}`);
+
+      statusEl.textContent = '✓ Synced — serving agent requests';
+      errorEl.style.display = 'none';
+      jobsEl.style.display = 'block';
+      jobsEl.textContent = `Jobs served: ${jobsServed}`;
+      parent.postMessage({ pluginMessage: { type: 'SYNC_DONE' } }, '*');
+
+      startPolling();
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      showError('Sync error: ' + m);
+      addLog('FAILED: ' + m);
+      parent.postMessage({ pluginMessage: { type: 'SYNC_ERROR' } }, '*');
+    } finally {
+      resyncEl.disabled = false;
+    }
+  }
+
+  // ── On-demand job loop ────────────────────────────────────────────────────
+  function startPolling() {
+    if (polling) return;
+    polling = true;
+    pollOnce();
+  }
+
+  async function pollOnce() {
+    if (!polling) return;
+    try {
+      const res = await fetch(`${SERVER}/api/job/next`);
+      if (res.ok) {
+        const job = await res.json();
+        if (job && job.jobId) {
+          addLog(`📤 ${job.kind}${job.nodeId ? ' [' + job.nodeId + ']' : ''}`);
+          parent.postMessage({
+            pluginMessage: {
+              type: 'JOB',
+              jobId: job.jobId,
+              kind: job.kind,
+              nodeId: job.nodeId,
+              params: job.params,
+            },
+          }, '*');
+          // Wait for JOB_RESULT before polling again.
+          return;
+        }
+      }
+    } catch (e) {
+      addLog(`❌ Poll error: ${e}`);
+    }
+    setTimeout(pollOnce, 2000);
+  }
+
+  async function completeJob(msg) {
+    const { jobId, kind, bytes, json, error } = msg;
+    const size = bytes ? bytes.length + ' bytes' : json ? JSON.stringify(json).length + ' chars' : '0';
+    addLog(`📥 ${kind} → ${error ? 'ERROR ' + error : size}`);
+
+    try {
+      const res = await fetch(`${SERVER}/api/job/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId,
+          kind,
+          bytes: bytes || null,
+          json: json === undefined ? null : json,
+          error: error || null,
+        }),
+      });
+      if (!error) {
+        jobsServed++;
+        jobsEl.textContent = `Jobs served: ${jobsServed}`;
+      }
+      if (!res.ok) addLog(`⚠️ /complete returned ${res.status}`);
+    } catch (e) {
+      addLog(`❌ Could not POST /complete: ${e}`);
+      showError(`POST /complete failed: ${e}`);
+    }
+
+    setTimeout(pollOnce, 150);
+  }
+
+  addLog('UI loaded — handshaking with plugin…');
+  // window.onmessage is attached by now, so the plugin can safely start posting.
+  parent.postMessage({ pluginMessage: { type: 'UI_READY' } }, '*');
+</script>
+</body>
+</html>
