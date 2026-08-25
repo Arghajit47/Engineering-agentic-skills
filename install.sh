@@ -145,7 +145,14 @@ if os.path.exists(observe):
                (observe, "SessionStart", None), (observe, "Stop", None)]
 for script, event, matcher in wiring:
     lst = hooks.setdefault(event, [])
-    if any(script in h.get("command", "") for e in lst for h in e.get("hooks", [])):
+    # Installed means this script registered under THIS matcher. A guard present
+    # under only "Edit" must not stop "Edit|Write|MultiEdit" being registered.
+    already = any(
+        (e.get("matcher") or None) == matcher
+        and any(script in h.get("command", "") for h in e.get("hooks", []))
+        for e in lst
+    )
+    if already:
         continue
     entry = {"hooks": [{"type": "command", "command": "python3 '%s'" % script, "timeout": 10}]}
     if matcher:

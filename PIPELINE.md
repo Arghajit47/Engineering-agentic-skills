@@ -230,7 +230,9 @@ Off switch: `touch ~/.claude/skills/hooks/DISABLED`. See `hooks/README.md`.
     body, from every skill, no exceptions. Never wiki markup, HTML, or raw Markdown —
     all three render as broken literal text. Templates in the skills are Markdown for
     readability, not the wire format: convert with `scripts/adf.py` and validate before
-    posting. Verdicts open with a coloured panel. See `rules/ADF.md`.
+    posting. Every posting skill owns ready-made templates at
+    `<skill>/templates/adf/*.adf.json` — load, substitute, validate, post; never
+    compose ADF by hand. Verdicts open with a coloured panel. See `rules/ADF.md`.
 15. **No identifying values are hardcoded.** Account ids, site hosts, project keys,
     repo owners, emails, and deployed URLs appear only as `{{PLACEHOLDER}}`, resolved
     from `project-config.local.md` at setup time. A skill that cannot resolve one

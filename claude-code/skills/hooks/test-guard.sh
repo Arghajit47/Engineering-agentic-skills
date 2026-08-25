@@ -63,6 +63,18 @@ bash_case "push current from feature"     'git push origin'                     
 bash_case "explicit main still blocked"   'git push origin main'                     block
 on_branch main
 
+echo "== git global options and ref forms (bypasses found in review) =="
+bash_case "git -C push to main"           'git -C /repo push origin main'             block
+bash_case "git -C commit on main"         'git -C /repo commit -m x'                  block
+bash_case "git --no-pager push main"      'git --no-pager push origin main'           block
+bash_case "env prefix then push main"     'FOO=1 git push origin main'                block
+bash_case "refs/heads/main"               'git push origin HEAD:refs/heads/main'      block
+bash_case "heads/main"                    'git push origin heads/main'                block
+bash_case "branch then back to main"      'git checkout -b feat/x && git checkout main && git commit -m x'  block
+bash_case "git -C push to a branch"       'git -C /repo push origin feat/x'           allow
+bash_case "refs/heads/feat"               'git push origin HEAD:refs/heads/feat'      allow
+bash_case "switch -c then commit + push"  'git switch -c feat && git commit -m x && git push origin feat'   allow
+
 echo "== token separation =="
 bash_case "both tokens assigned"          'GITHUB_TOKEN=$A GITHUB_REVIEWER_TOKEN=$B gh pr merge 1'      block
 bash_case "both tokens expanded"          'echo $GITHUB_TOKEN; gh api -H "x: $GITHUB_REVIEWER_TOKEN"'   block
@@ -73,6 +85,7 @@ echo "== gh --body injection =="
 bash_case "body with backtick"            'gh pr create --body "see `ls`"'           block
 bash_case "body plain"                    'gh pr create --body "plain"'              allow
 bash_case "body-file"                     'gh pr create --body-file b.md'            allow
+bash_case "backtick body AND body-file"   'gh pr create --body "see `ls`" --body-file b.md'  block
 
 echo "== visual baseline =="
 bash_case "playwright -u"                 'npx playwright test -u'                   block

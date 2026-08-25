@@ -25,6 +25,25 @@ whoever reads the ticket.
 *which sections appear, in what order, and what they must contain*. They are **not** the
 wire format. Convert before sending — never paste a template body into a v3 payload.
 
+## Start from your skill's template
+
+Do not compose ADF from scratch. Every JIRA-posting skill owns ready-made, valid ADF
+templates:
+
+```
+<skill>/templates/adf/description.adf.json
+<skill>/templates/adf/comment.adf.json
+<skill>/templates/adf/reply.adf.json
+<skill>/templates/adf/<artifact>.adf.json
+```
+
+Load, substitute the `{{PLACEHOLDER}}` tokens, drop sections the ticket does not need,
+validate, post. Never leave a placeholder in a posted body.
+
+They are **generated**, not hand-written: sources are
+`templates/adf/_src/<skill>/<artifact>.adf.md` and `templates/adf/build.sh` rebuilds and
+validates all of them. Edit the source, rebuild — never the JSON, or the two drift.
+
 ## Build it, do not hand-write it
 
 ```bash

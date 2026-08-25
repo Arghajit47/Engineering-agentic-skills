@@ -46,7 +46,8 @@ fi
 # documentation placeholders (/Users/..., /Users/<name>) are not flagged, while an
 # actual leaked path is.
 HOMELEAK=$(grep -RnIE "/Users/[A-Za-z0-9][A-Za-z0-9._-]*" "$BUNDLE" --exclude-dir=.git 2>/dev/null \
-  | grep -v '\$HOME' | grep -vE '/Users/(someone|user|you|example)\b' || true)
+  | grep -v '\$HOME' \
+  | grep -viE '/Users/(someone|user|you|example)(/|$)' || true)
 if [ -n "$HOMELEAK" ]; then
   echo "REFUSING TO SYNC — a personal filesystem path leaked into a skill:" >&2
   echo "$HOMELEAK" | head -10 >&2

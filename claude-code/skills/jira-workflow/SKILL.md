@@ -20,32 +20,21 @@ license: MIT
 
 ## JIRA content format — ADF only, no exceptions
 
-**Every** JIRA description, comment, reply, and subtask body this skill writes is
-Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
+This skill transitions tickets; it does not author content. But every skill that *does*
+post — description, comment, reply, subtask body — sends Atlassian Document Format v3
+JSON, with no exemptions.
 
-**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
-Markdown (`## heading`, `| a | b |`, `**bold**`) in any field. All three render as broken
-literal text in the modern issue view.
+Each posting skill owns its templates at `<skill>/templates/adf/*.adf.json`, generated
+from `templates/adf/_src/<skill>/` by `templates/adf/build.sh`. Never wiki markup, HTML,
+or raw Markdown — all three render as broken literal text.
 
-Templates in this file are written in Markdown **for human readability**. They define the
-sections, their order, and their content — they are **not** the wire format. Convert
-before posting:
+Validate before posting:
 
 ```bash
-python3 ~/.claude/skills/scripts/adf.py --in body.md --out body.adf.json
-python3 ~/.claude/skills/scripts/adf.py --validate body.adf.json   # must pass before posting
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json
 ```
 
-Then send the JSON object as the body — `commentBody` for Rovo MCP,
-`{"body": …}` or `{"fields": {"description": …}}` for REST v3.
-
-Open any verdict with a panel so the outcome is visible without reading:
-`:::success` PASS · `:::error` FAIL/BLOCK · `:::info` PASS WITH NOTES · `:::note` advisory.
-
-Full spec, node rules, and the per-artifact structure table: `rules/ADF.md`.
-
-
-The assignee **must** be updated on **every** status transition.
+Spec: `rules/ADF.md`.
 
 ## Mapping
 

@@ -28,27 +28,29 @@ metadata:
 **Every** JIRA description, comment, reply, and subtask body this skill writes is
 Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
 
-**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
-Markdown (`## heading`, `| a | b |`, `**bold**`) in any field. All three render as broken
-literal text in the modern issue view.
+**Start from this skill's own template — do not compose ADF by hand:**
 
-Templates in this file are written in Markdown **for human readability**. They define the
-sections, their order, and their content — they are **not** the wire format. Convert
-before posting:
+| Template | Use for |
+|---|---|
+| `templates/adf/comment.adf.json` | any other comment on a ticket |
+| `templates/adf/execution-plan.adf.json` | the plan attached before dispatching a sub-agent |
+
+Each is valid ADF v3 with `{{PLACEHOLDER}}` tokens. Load it, substitute, post the
+object as the body — `commentBody` for Rovo MCP, `{"body": …}` or
+`{"fields": {"description": …}}` for REST v3. Delete any row or section the ticket
+genuinely does not need; never leave a `{{PLACEHOLDER}}` in a posted body.
 
 ```bash
-python3 ~/.claude/skills/scripts/adf.py --in body.md --out body.adf.json
-python3 ~/.claude/skills/scripts/adf.py --validate body.adf.json   # must pass before posting
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json   # before posting
 ```
 
-Then send the JSON object as the body — `commentBody` for Rovo MCP,
-`{"body": …}` or `{"fields": {"description": …}}` for REST v3.
+**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
+Markdown (`## heading`, `| a | b |`, `**bold**`). All three render as broken literal text
+in the modern issue view.
 
-Open any verdict with a panel so the outcome is visible without reading:
-`:::success` PASS · `:::error` FAIL/BLOCK · `:::info` PASS WITH NOTES · `:::note` advisory.
-
-Full spec, node rules, and the per-artifact structure table: `rules/ADF.md`.
-
+Templates are generated from `templates/adf/_src/developer-agent-ecosystem/*.adf.md` by
+`templates/adf/build.sh` — edit the source and rebuild, never the JSON. Full node spec:
+`rules/ADF.md`.
 
 ## Figma read path — bridge or Figma MCP
 

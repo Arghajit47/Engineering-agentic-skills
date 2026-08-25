@@ -19,8 +19,8 @@ to a specific thing that went wrong. If you cannot name the incident, delete the
 - **Update a visual baseline inside a feature PR.** Own PR, stated reason. (Hook.)
 - **Auto-file a ticket.** A measurement is not a defect. Report; the user decides.
 - **Post non-ADF content to JIRA.** Descriptions, comments and replies are ADF v3 JSON —
-  never wiki markup, HTML, or raw Markdown. Convert with `scripts/adf.py`, validate, then
-  post. See `rules/ADF.md`.
+  never wiki markup, HTML, or raw Markdown. Start from the skill's own
+  `templates/adf/*.adf.json`, substitute, validate with `scripts/adf.py`, then post.
 - **Estimate a design value.** Read it, or halt and say the bridge is unavailable.
 
 ## Always

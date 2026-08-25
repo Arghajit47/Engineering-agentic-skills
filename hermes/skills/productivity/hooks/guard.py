@@ -61,37 +61,100 @@ def strip_quoted(cmd):
 
 
 # ---------------------------------------------------------------- Bash rules
+# Global options that may sit between `git` and the subcommand. Some take a value.
+GIT_GLOBAL_VALUED = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+GIT_GLOBAL_FLAGS = {"-P", "--no-pager", "--paginate", "--bare", "--literal-pathspecs",
+                    "--no-replace-objects", "--no-optional-locks"}
+
+SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\||\n")
+
+
+def segments(cmd):
+    """Split a command line into execution segments, in order.
+
+    Quoted regions are blanked for splitting only, so a `;` inside a string does
+    not create a phantom segment, while offsets stay aligned with the original.
+    """
+    masked = re.sub(r"'[^']*'|\"[^\"]*\"", lambda m: " " * len(m.group()), strip_heredocs(cmd))
+    out, last = [], 0
+    for m in SEGMENT_SPLIT.finditer(masked):
+        out.append(cmd[last:m.start()])
+        last = m.end()
+    out.append(cmd[last:])
+    return [x.strip() for x in out if x.strip()]
+
+
+def parse_git(seg):
+    """-> (subcommand, args) for a git invocation, else (None, []).
+
+    Skips leading env assignments and git global options, so `git -C /r push` and
+    `FOO=1 git --no-pager push` are both seen as a push.
+    """
+    try:
+        toks = seg.split()
+    except Exception:
+        return None, []
+    i = 0
+    while i < len(toks) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", toks[i]):
+        i += 1
+    if i >= len(toks) or os.path.basename(toks[i].strip("\"'")) != "git":
+        return None, []
+    i += 1
+    while i < len(toks):
+        t = toks[i]
+        if t in GIT_GLOBAL_VALUED:
+            i += 2; continue
+        if any(t.startswith(g + "=") for g in GIT_GLOBAL_VALUED) or t in GIT_GLOBAL_FLAGS:
+            i += 1; continue
+        break
+    if i >= len(toks):
+        return None, []
+    return toks[i], toks[i + 1:]
+
+
+def norm_ref(ref):
+    """origin/+HEAD:refs/heads/main -> main"""
+    ref = ref.split(":")[-1].lstrip("+")
+    for prefix in ("refs/heads/", "heads/"):
+        if ref.startswith(prefix):
+            ref = ref[len(prefix):]
+    return ref
+
+
 def check_bash(cmd, cwd):
     bare = strip_quoted(cmd)
 
-    # 1. Never push to a protected branch.
-    if re.search(r"\bgit\s+push\b", bare):
-        target = re.search(r"\bgit\s+push\b[^|;&]*", bare).group(0)
-        # Drop flags (-f, --force, --force-with-lease, ...) before reading remote/branch.
-        args = [a for a in target.split()[2:] if not a.startswith("-")]
-        named = None
-        if len(args) >= 2:
-            ref = args[1]
-            named = ref.split(":")[-1].lstrip("+")   # handles HEAD:main and +main
-        if named in PROTECTED:
-            die("never-push-to-main",
-                f"`git push` targets '{named}'.\n"
-                "Branch, open a PR, get approval. If you are landing an approved PR, "
-                "merge it with `gh pr merge` instead.")
-        if not named and current_branch(cwd) in PROTECTED:
-            die("never-push-to-main",
-                f"You are on '{current_branch(cwd)}' and this pushes the current branch.\n"
-                "Create a branch first: git checkout -b <name>")
+    # Walk segments in execution order so branch state is correct at each point.
+    branch = current_branch(cwd)
+    for seg in segments(cmd):
+        sub, args = parse_git(seg)
+        if not sub:
+            continue
+        positional = [a for a in args if not a.startswith("-")]
 
-    # 2. Never commit directly on a protected branch.
-    #    A compound command that creates a branch first is fine — by the time the
-    #    commit runs, HEAD is no longer on the protected branch. The hook sees the
-    #    branch as it is *before* execution, so check for that intent explicitly.
-    makes_branch = re.search(r"\bgit\s+(?:checkout\s+-\w*b|switch\s+-\w*c)\b", bare)
-    if re.search(r"\bgit\s+commit\b", bare) and not makes_branch and current_branch(cwd) in PROTECTED:
-        die("never-commit-on-main",
-            f"You are on '{current_branch(cwd)}'.\n"
-            "git checkout -b <branch> first, then commit.")
+        # Track branch changes as they happen.
+        if sub in ("checkout", "switch"):
+            creating = any(a.startswith("-") and ("b" in a.lstrip("-") or "c" in a.lstrip("-"))
+                           for a in args if a.startswith("-"))
+            if positional:
+                branch = norm_ref(positional[0])
+            elif creating:
+                branch = "(new)"
+            continue
+
+        if sub == "push":
+            named = norm_ref(positional[1]) if len(positional) >= 2 else None
+            target = named or branch
+            if target in PROTECTED:
+                die("never-push-to-main",
+                    f"`git push` targets '{target}'.\n"
+                    "Branch, open a PR, get approval. If you are landing an approved PR, "
+                    "merge it with `gh pr merge` instead.")
+
+        if sub == "commit" and branch in PROTECTED:
+            die("never-commit-on-main",
+                f"This commit runs while HEAD is on '{branch}'.\n"
+                "git checkout -b <branch> first, then commit.")
 
     # 3. Dev and reviewer credentials must never meet.
     def _used(name):
@@ -104,12 +167,15 @@ def check_bash(cmd, cwd):
             "GITHUB_TOKEN (dev) and GITHUB_REVIEWER_TOKEN (review/merge) appear in the "
             "same command.\nUse exactly one. Mixing them defeats the separation.")
 
-    # 4. `gh ... --body` with a backtick is command substitution.
-    m = re.search(r"\bgh\s+(?:pr|issue|release)\s+\S+[^\n]*?--body(?:=|\s+)(.+)", strip_heredocs(cmd), re.S)
-    if m and "`" in m.group(1) and "--body-file" not in cmd:
+    # 4. A backtick inside --body is executed by the shell before gh ever sees it,
+    #    so --body-file being present too does not make it safe.
+    m = re.search(r"\bgh\s+(?:pr|issue|release)\s+\S+[^\n]*?--body(?:=|\s+)(.+)",
+                  strip_heredocs(cmd), re.S)
+    if m and "`" in m.group(1):
         die("gh-body-injection",
             "A backtick inside `--body` is executed by the shell as command "
-            "substitution.\nWrite the body to a file and use --body-file instead.")
+            "substitution.\nWrite the body to a file and use --body-file alone — "
+            "passing both still runs the backtick.")
 
     # 5. Snapshot baselines change only on purpose, in their own PR.
     if re.search(r"--update-snapshots|(?<![\w-])-u(?![\w-])", bare) and "playwright" in bare:
