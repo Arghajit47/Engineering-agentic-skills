@@ -39,6 +39,16 @@ for d in "$SRC"/*/; do
   n=$((n+1))
 done
 
+# Non-skill directories (no SKILL.md, so the loop above skips them) that the
+# harness still needs: enforcement hooks and the always-on rules template.
+for extra in hooks rules telemetry scripts templates; do
+  if [ -d "$SRC/$extra" ]; then
+    rsync -a --copy-links --exclude '.DS_Store' --exclude '__pycache__' --exclude 'DISABLED' --exclude 'events.jsonl*' \
+      "$SRC/$extra/" "$DEST/$extra/"
+    echo "    $extra/ (not a skill — copied verbatim)"
+  fi
+done
+
 # Shared docs, as real files (Hermes may be installed without the Claude tree)
 cp "$SRC/PIPELINE.md"       "$DEST/PIPELINE.md"
 cp "$SRC/PROJECT-CONFIG.md" "$DEST/PROJECT-CONFIG.md"

@@ -23,12 +23,34 @@ metadata:
 > silently grades the wrong site. Full table and asking rules: `PROJECT-CONFIG.md`.
 
 
-**Behavior/agent wiring:** Main agent runs `/behavior claude-opus-5`. Attack-surface discovery via `/custom-agent Explore`; scanner execution via `/custom-agent worker`. The two review lenses (application / harness) may run in parallel via `/custom-agent teammate`.
+## JIRA content format — ADF only, no exceptions
 
-**Trigger Commands:**
-- `/security-review <PR_NUMBER>` — diff-scoped gate (the normal path)
-- `/security-review --repo` — full repository audit (periodic, not per-PR)
-- Auto-invoked as a gate by `/pr-review-and-merge` before any merge decision.
+**Every** JIRA description, comment, reply, and subtask body this skill writes is
+Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
+
+**Start from this skill's own template — do not compose ADF by hand:**
+
+| Template | Use for |
+|---|---|
+| `templates/adf/comment.adf.json` | any other comment on a ticket |
+| `templates/adf/security-verdict.adf.json` | the PASS / PASS WITH NOTES / BLOCK verdict |
+
+Each is valid ADF v3 with `{{PLACEHOLDER}}` tokens. Load it, substitute, post the
+object as the body — `commentBody` for Rovo MCP, `{"body": …}` or
+`{"fields": {"description": …}}` for REST v3. Delete any row or section the ticket
+genuinely does not need; never leave a `{{PLACEHOLDER}}` in a posted body.
+
+```bash
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json   # before posting
+```
+
+**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
+Markdown (`## heading`, `| a | b |`, `**bold**`). All three render as broken literal text
+in the modern issue view.
+
+Templates are generated from `templates/adf/_src/security-review/*.adf.md` by
+`templates/adf/build.sh` — edit the source and rebuild, never the JSON. Full node spec:
+`rules/ADF.md`.
 
 ## Why this skill exists
 

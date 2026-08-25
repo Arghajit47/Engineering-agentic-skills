@@ -18,7 +18,23 @@ license: MIT
 > silently grades the wrong site. Full table and asking rules: `PROJECT-CONFIG.md`.
 
 
-The assignee **must** be updated on **every** status transition.
+## JIRA content format — ADF only, no exceptions
+
+This skill transitions tickets; it does not author content. But every skill that *does*
+post — description, comment, reply, subtask body — sends Atlassian Document Format v3
+JSON, with no exemptions.
+
+Each posting skill owns its templates at `<skill>/templates/adf/*.adf.json`, generated
+from `templates/adf/_src/<skill>/` by `templates/adf/build.sh`. Never wiki markup, HTML,
+or raw Markdown — all three render as broken literal text.
+
+Validate before posting:
+
+```bash
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json
+```
+
+Spec: `rules/ADF.md`.
 
 ## Mapping
 

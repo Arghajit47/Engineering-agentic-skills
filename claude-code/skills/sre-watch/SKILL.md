@@ -23,14 +23,35 @@ metadata:
 > silently grades the wrong site. Full table and asking rules: `PROJECT-CONFIG.md`.
 
 
-**Behavior/agent wiring:** Main agent runs `/behavior claude-opus-5`. Probe execution via `/custom-agent worker`; log/code correlation via `/custom-agent Explore`.
+## JIRA content format — ADF only, no exceptions
 
-**Trigger Commands:**
-- `/sre <TICKET>` — post-release soak (auto-invoked by `/quality-analyst` on pass)
-- `/sre --incident "<symptom>"` — triage something already broken in production
-- `/sre --health` — on-demand production health sweep
+**Every** JIRA description, comment, reply, and subtask body this skill writes is
+Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
 
-**Position in the lifecycle:** `/quality-analyst` → **`/sre`** (the only stage that exists *after* Done)
+**Start from this skill's own template — do not compose ADF by hand:**
+
+| Template | Use for |
+|---|---|
+| `templates/adf/comment.adf.json` | any other comment on a ticket |
+| `templates/adf/incident.adf.json` | an incident record |
+| `templates/adf/soak-report.adf.json` | the post-deploy soak |
+
+Each is valid ADF v3 with `{{PLACEHOLDER}}` tokens. Load it, substitute, post the
+object as the body — `commentBody` for Rovo MCP, `{"body": …}` or
+`{"fields": {"description": …}}` for REST v3. Delete any row or section the ticket
+genuinely does not need; never leave a `{{PLACEHOLDER}}` in a posted body.
+
+```bash
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json   # before posting
+```
+
+**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
+Markdown (`## heading`, `| a | b |`, `**bold**`). All three render as broken literal text
+in the modern issue view.
+
+Templates are generated from `templates/adf/_src/sre-watch/*.adf.md` by
+`templates/adf/build.sh` — edit the source and rebuild, never the JSON. Full node spec:
+`rules/ADF.md`.
 
 ## Why this skill exists
 

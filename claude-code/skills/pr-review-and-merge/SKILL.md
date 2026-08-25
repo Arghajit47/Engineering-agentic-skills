@@ -23,16 +23,34 @@ metadata:
 > silently grades the wrong site. Full table and asking rules: `PROJECT-CONFIG.md`.
 
 
-**Behavior/agent wiring:** Main agent runs `/behavior claude-opus-5`. For large/complex reviews, use `/custom-agent Explore` to find related files, `/custom-agent Plan` to structure the review plan, and `/custom-agent worker` to run the verification suite. **The `/custom-agent Plan` and `/custom-agent worker` sub-agents responsible for the actual code review must load `github-code-review` as their skill context** — dispatch them with `skill_view(name="github-code-review")` as the first instruction in their prompt so the review checklist (Correctness, Security, Code Quality, Testing, Performance, Documentation, Visual Spec Review), inline comment format, and verdict structure all come from that skill. Parallel review tasks (e.g., frontend + backend scope checks) can coordinate via `/custom-agent teammate`.
+## JIRA content format — ADF only, no exceptions
 
-End-to-end: clone a PR, verify it against a Jira ticket's acceptance criteria,
-post a review verdict to GitHub, and merge if approved. This skill owns the
-**review-then-merge** lifecycle for the user's own repos, including the common
-case where the only GitHub credential is the PR author's token (self-review).
+**Every** JIRA description, comment, reply, and subtask body this skill writes is
+Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
 
-The bundled `github-code-review` and `github-pr-workflow` skills cover the
-mechanics in general; this skill layers on the AC-driven workflow and the
-self-approval fallback those bundled skills can't be patched to carry.
+**Start from this skill's own template — do not compose ADF by hand:**
+
+| Template | Use for |
+|---|---|
+| `templates/adf/comment.adf.json` | any other comment on a ticket |
+| `templates/adf/review-verdict.adf.json` | the AC-by-AC review verdict |
+
+Each is valid ADF v3 with `{{PLACEHOLDER}}` tokens. Load it, substitute, post the
+object as the body — `commentBody` for Rovo MCP, `{"body": …}` or
+`{"fields": {"description": …}}` for REST v3. Delete any row or section the ticket
+genuinely does not need; never leave a `{{PLACEHOLDER}}` in a posted body.
+
+```bash
+python3 ~/.claude/skills/scripts/adf.py --validate <filled>.adf.json   # before posting
+```
+
+**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
+Markdown (`## heading`, `| a | b |`, `**bold**`). All three render as broken literal text
+in the modern issue view.
+
+Templates are generated from `templates/adf/_src/pr-review-and-merge/*.adf.md` by
+`templates/adf/build.sh` — edit the source and rebuild, never the JSON. Full node spec:
+`rules/ADF.md`.
 
 ## Pipeline position and gates
 

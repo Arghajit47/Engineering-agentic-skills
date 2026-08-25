@@ -22,6 +22,7 @@ mkdir -p "$DEST"
 rsync -a --copy-links --delete \
   --exclude '.DS_Store' --exclude '__pycache__' --exclude '*.pyc' \
   --exclude 'project-config.local.md' --exclude '*.local.md' \
+  --exclude 'events.jsonl*' --exclude 'DISABLED' \
   "$SRC"/ "$DEST"/
 
 # PIPELINE.md lives at both the bundle root and inside skills/ so it is found either way.
@@ -41,7 +42,18 @@ if [ -n "$LEAK" ]; then
   echo "Replace it with a {{PLACEHOLDER}} and add the key to PROJECT-CONFIG.md." >&2
   exit 1
 fi
-HOMELEAK=$(grep -RnI "/Users/[A-Za-z0-9._-]\+" "$BUNDLE" --exclude-dir=.git 2>/dev/null | grep -v '\$HOME' || true)
+# Require a real-looking username: must start with a letter or digit, so
+# documentation placeholders (/Users/..., /Users/<name>) never match.
+# Known placeholder names are exempt, case-insensitively, but ONLY when the name
+# ends there — the following character must be outside the username alphabet.
+# So a placeholder with anything appended — a hyphenated name, a dotted domain —
+# is still treated as a real leak, while prose that quotes a bare placeholder in
+# backticks or quotes does not trip the guard.
+# Deliberately grep -E, not -P: PCRE is not available everywhere, and because this
+# pipeline ends in `|| true` a failing grep would silently disable the check.
+HOMELEAK=$(grep -RnIE "/Users/[A-Za-z0-9][A-Za-z0-9._-]*" "$BUNDLE" --exclude-dir=.git 2>/dev/null \
+  | grep -v '\$HOME' \
+  | grep -viE '/Users/(someone|user|you|example)([^A-Za-z0-9._-]|$)' || true)
 if [ -n "$HOMELEAK" ]; then
   echo "REFUSING TO SYNC — a personal filesystem path leaked into a skill:" >&2
   echo "$HOMELEAK" | head -10 >&2

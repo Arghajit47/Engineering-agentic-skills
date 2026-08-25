@@ -10,6 +10,8 @@
 #   ./install.sh --setup         # (re-)run the configuration prompts only
 #   ./install.sh --with-bridge   # also install the Local AI Bridge (Figma read path)
 #   ./install.sh --no-bridge     # never offer the bridge
+#   ./install.sh --with-hooks    # wire the enforcement hooks into settings.json
+#   ./install.sh --no-hooks      # never offer them
 set -euo pipefail
 
 BUNDLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,6 +22,7 @@ DRY=0
 SETUP_ONLY=0
 SETUP=1
 BRIDGE=ask
+HOOKS=ask
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -27,12 +30,14 @@ while [ $# -gt 0 ]; do
     --no-setup) SETUP=0; shift ;;
     --with-bridge) BRIDGE=yes; shift ;;
     --no-bridge)   BRIDGE=no; shift ;;
+    --with-hooks)  HOOKS=yes; shift ;;
+    --no-hooks)    HOOKS=no; shift ;;
     --dest)    DEST="$2"; DEST_SET=1; shift 2 ;;
     --target)  TARGET="$2"; shift 2 ;;
     --list)    LIST_ONLY=1; shift ;;
     --setup)   SETUP_ONLY=1; shift ;;
     --config)  SHOW_CONFIG=1; shift ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -87,6 +92,82 @@ command -v rsync >/dev/null || { echo "error: rsync required" >&2; exit 1; }
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+install_hooks() {
+  local GUARD="$DEST/hooks/guard.py"
+  [ -f "$GUARD" ] || return 0
+  command -v python3 >/dev/null 2>&1 || { echo "    python3 not found — hooks skipped"; return 0; }
+
+  if [ "$HOOKS" = ask ]; then
+    if [ ! -t 0 ]; then HOOKS=no; else
+      echo
+      echo "  Enforcement hooks — harness-level, so they cannot be missed when context"
+      echo "  is long. They block: pushing/committing to main, mixing the dev and"
+      echo "  reviewer GitHub tokens, 'gh --body' with backticks, and updating a visual"
+      echo "  baseline; and warn on raw hex / default breakpoints in components."
+      echo "  It also records which gates fire (rule name + repo basename only —"
+      echo "  never command text, file contents or prompts) so /agent-eval has data."
+      echo "  A hook overrides your permission allowlist. Off switch:"
+      echo "    touch $DEST/hooks/DISABLED"
+      echo "  Type 'y' to wire them in, or 'n' to decline. There is no default —"
+      echo "  this changes how your harness behaves, so it needs an explicit answer."
+      while :; do
+        read -r -p "  Wire them into settings.json? (y/n) " ans
+        case "$ans" in
+          y|Y|yes|Yes) HOOKS=yes; break ;;
+          n|N|no|No)   HOOKS=no;  break ;;
+          *) echo "    Please type y or n." ;;
+        esac
+      done
+    fi
+  fi
+  [ "$HOOKS" = yes ] || { echo "    Hooks not wired. Later: ./install.sh --with-hooks"; return 0; }
+
+  python3 - "$GUARD" <<'PYHOOK'
+import json, os, shutil, sys, datetime
+guard = sys.argv[1]
+p = os.path.expanduser("~/.claude/settings.json")
+cfg = {}
+if os.path.exists(p):
+    shutil.copy(p, p + ".backup-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+    try:
+        cfg = json.load(open(p))
+    except Exception:
+        print("    settings.json is not valid JSON — not touching it"); sys.exit(0)
+else:
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+hooks = cfg.setdefault("hooks", {})
+added = []
+observe = os.path.join(os.path.dirname(os.path.dirname(guard)), "telemetry", "observe.py")
+wiring = [(guard, "PreToolUse", "Bash"), (guard, "PostToolUse", "Edit|Write|MultiEdit")]
+if os.path.exists(observe):
+    wiring += [(observe, "PreToolUse", "Skill|Task"),
+               (observe, "SessionStart", None), (observe, "Stop", None)]
+for script, event, matcher in wiring:
+    lst = hooks.setdefault(event, [])
+    # Installed means this script registered under THIS matcher. A guard present
+    # under only "Edit" must not stop "Edit|Write|MultiEdit" being registered.
+    already = any(
+        (e.get("matcher") or None) == matcher
+        and any(script in h.get("command", "") for h in e.get("hooks", []))
+        for e in lst
+    )
+    if already:
+        continue
+    entry = {"hooks": [{"type": "command", "command": "python3 '%s'" % script, "timeout": 10}]}
+    if matcher:
+        entry = {"matcher": matcher, **entry}
+    lst.append(entry)
+    label = event + ("/" + matcher if matcher else "")
+    if label not in added:
+        added.append(label)
+json.dump(cfg, open(p, "w"), indent=2); open(p, "a").write("\n")
+print("    " + (", ".join(added) + " wired" if added else "already wired") +
+      " (existing hooks preserved, settings.json backed up)")
+PYHOOK
+  echo "    self-test: $("$DEST/hooks/test-guard.sh" 2>/dev/null | tail -1)"
+}
+
 # ---------------------------------------------------------------------------
 install_bridge() {
   local SRC="$BUNDLE/bridge"
@@ -397,10 +478,14 @@ find "$DEST" -name '*.py' -exec chmod +x {} \; 2>/dev/null || true
 
 [ "$SETUP" -eq 1 ] && run_setup
 [ "$TARGET" = claude ] && install_bridge
+[ "$TARGET" = claude ] && install_hooks
 
 cat <<'DONE'
 
 Installed. Restart Claude Code (or /clear) so the skills are picked up.
+
+  Always-on rules template (copy to your repo root as AGENTS.md or CLAUDE.md):
+                ~/.claude/skills/rules/AGENTS.md
 
   Your config:  ~/.claude/skills/project-config.local.md
                 view it any time with  ./install.sh --config
