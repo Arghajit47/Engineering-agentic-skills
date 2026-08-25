@@ -22,6 +22,7 @@ mkdir -p "$DEST"
 rsync -a --copy-links --delete \
   --exclude '.DS_Store' --exclude '__pycache__' --exclude '*.pyc' \
   --exclude 'project-config.local.md' --exclude '*.local.md' \
+  --exclude 'events.jsonl*' --exclude 'DISABLED' \
   "$SRC"/ "$DEST"/
 
 # PIPELINE.md lives at both the bundle root and inside skills/ so it is found either way.

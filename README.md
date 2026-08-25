@@ -147,6 +147,8 @@ alternative read path.
 | Component | What it does |
 |---|---|
 | `hooks/guard.py` | Harness-level rules that **block**: pushing or committing to `main`, mixing the dev and reviewer GitHub tokens, `gh --body` with backticks, updating a visual baseline. Warns on raw hex / default breakpoints in components. Overrides your permission allowlist. |
+| `rules/ADF.md` + `scripts/adf.py` | **All JIRA content is ADF v3 JSON — no exceptions.** Markdown-subset → ADF converter and a validator that rejects wiki markup, HTML, and raw Markdown before anything is posted. |
+| `telemetry/` | Records which gates fire, which never do, and which skills get reached — the data `/agent-eval` uses. Rule names and repo basenames only; never command text, file contents, or prompts. |
 | `rules/AGENTS.md` | Always-on rules template. Copy to a repo root as `AGENTS.md`/`CLAUDE.md` — under 50 lines, in context every turn, before any skill loads. |
 
 Skill prose is instruction a model *chooses* to follow; a hook is executed by the

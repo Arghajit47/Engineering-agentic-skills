@@ -41,9 +41,9 @@ done
 
 # Non-skill directories (no SKILL.md, so the loop above skips them) that the
 # harness still needs: enforcement hooks and the always-on rules template.
-for extra in hooks rules; do
+for extra in hooks rules telemetry scripts; do
   if [ -d "$SRC/$extra" ]; then
-    rsync -a --copy-links --exclude '.DS_Store' --exclude '__pycache__' --exclude 'DISABLED' \
+    rsync -a --copy-links --exclude '.DS_Store' --exclude '__pycache__' --exclude 'DISABLED' --exclude 'events.jsonl*' \
       "$SRC/$extra/" "$DEST/$extra/"
     echo "    $extra/ (not a skill — copied verbatim)"
   fi

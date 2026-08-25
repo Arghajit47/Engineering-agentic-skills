@@ -23,6 +23,33 @@ metadata:
 > silently grades the wrong site. Full table and asking rules: `PROJECT-CONFIG.md`.
 
 
+## JIRA content format — ADF only, no exceptions
+
+**Every** JIRA description, comment, reply, and subtask body this skill writes is
+Atlassian Document Format (ADF) v3 JSON. There is no "quick comment" exemption.
+
+**Never** send Jira wiki markup (`h2.`, `||header||`, `{code}`), HTML (`<table>`), or raw
+Markdown (`## heading`, `| a | b |`, `**bold**`) in any field. All three render as broken
+literal text in the modern issue view.
+
+Templates in this file are written in Markdown **for human readability**. They define the
+sections, their order, and their content — they are **not** the wire format. Convert
+before posting:
+
+```bash
+python3 ~/.claude/skills/scripts/adf.py --in body.md --out body.adf.json
+python3 ~/.claude/skills/scripts/adf.py --validate body.adf.json   # must pass before posting
+```
+
+Then send the JSON object as the body — `commentBody` for Rovo MCP,
+`{"body": …}` or `{"fields": {"description": …}}` for REST v3.
+
+Open any verdict with a panel so the outcome is visible without reading:
+`:::success` PASS · `:::error` FAIL/BLOCK · `:::info` PASS WITH NOTES · `:::note` advisory.
+
+Full spec, node rules, and the per-artifact structure table: `rules/ADF.md`.
+
+
 **Behavior/agent wiring:** Main agent runs `/behavior claude-opus-5`. For large/complex reviews, use `/custom-agent Explore` to find related files, `/custom-agent Plan` to structure the review plan, and `/custom-agent worker` to run the verification suite. **The `/custom-agent Plan` and `/custom-agent worker` sub-agents responsible for the actual code review must load `github-code-review` as their skill context** — dispatch them with `skill_view(name="github-code-review")` as the first instruction in their prompt so the review checklist (Correctness, Security, Code Quality, Testing, Performance, Documentation, Visual Spec Review), inline comment format, and verdict structure all come from that skill. Parallel review tasks (e.g., frontend + backend scope checks) can coordinate via `/custom-agent teammate`.
 
 End-to-end: clone a PR, verify it against a Jira ticket's acceptance criteria,

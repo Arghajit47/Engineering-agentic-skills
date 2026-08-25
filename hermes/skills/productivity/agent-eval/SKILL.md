@@ -63,6 +63,26 @@ skill change, not more care.
 | QA failure comments in JIRA | the AC that failed and why it was not caught earlier |
 | `/pr-review-and-merge` blocking findings | what review caught that a gate should have |
 | Follow-up PRs | a fix that needed a second PR is a gate that fired too late |
+| **`telemetry/report.py`** | which harness gates fired, how often, and which never fired |
+
+```bash
+python3 ~/.claude/skills/telemetry/report.py --days 30
+python3 ~/.claude/skills/telemetry/report.py --days 30 --json   # to reason over
+```
+
+This is the only source here that measures the **harness** rather than the product, and
+it answers two questions JIRA cannot:
+
+- **A gate firing constantly is a workflow problem, not a working guard.** If
+  `never-push-to-main` fires ten times a week, something upstream keeps steering toward
+  main — fix that, do not celebrate the block.
+- **A rule that never fires is a candidate for deletion.** The Ratchet says a rule earns
+  its place by pointing at an incident. Long window, zero firings, no nameable incident
+  → propose removing it. Skills that only grow stop being read.
+
+Also check **which skills were invoked**. A pipeline skill absent from the list is not
+being reached, which is a broken handoff — not a skill nobody needs. Cross-check against
+the automatic chain in `PIPELINE.md`.
 
 ```
 # mcp: searchJiraIssuesUsingJql(
@@ -194,3 +214,7 @@ artifact other people install.
   discovery and nothing errors.
 - **Evaluating the skills without the JIRA evidence.** Without the rework data this
   becomes an opinion about prose style.
+- **Reading a high block count as success.** The guard stopping the same mistake weekly
+  means the pipeline keeps producing that mistake. The block is the symptom.
+- **Deleting a rule because it never fired, without asking.** Some rules are genuinely
+  preventive. Propose, do not remove — same as every other finding here.

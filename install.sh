@@ -105,6 +105,8 @@ install_hooks() {
       echo "  is long. They block: pushing/committing to main, mixing the dev and"
       echo "  reviewer GitHub tokens, 'gh --body' with backticks, and updating a visual"
       echo "  baseline; and warn on raw hex / default breakpoints in components."
+      echo "  It also records which gates fire (rule name + repo basename only —"
+      echo "  never command text, file contents or prompts) so /agent-eval has data."
       echo "  A hook overrides your permission allowlist. Off switch:"
       echo "    touch $DEST/hooks/DISABLED"
       echo "  Type 'y' to wire them in, or 'n' to decline. There is no default —"
@@ -136,13 +138,22 @@ else:
     os.makedirs(os.path.dirname(p), exist_ok=True)
 hooks = cfg.setdefault("hooks", {})
 added = []
-for event, matcher in (("PreToolUse", "Bash"), ("PostToolUse", "Edit|Write|MultiEdit")):
+observe = os.path.join(os.path.dirname(os.path.dirname(guard)), "telemetry", "observe.py")
+wiring = [(guard, "PreToolUse", "Bash"), (guard, "PostToolUse", "Edit|Write|MultiEdit")]
+if os.path.exists(observe):
+    wiring += [(observe, "PreToolUse", "Skill|Task"),
+               (observe, "SessionStart", None), (observe, "Stop", None)]
+for script, event, matcher in wiring:
     lst = hooks.setdefault(event, [])
-    if any(guard in h.get("command", "") for e in lst for h in e.get("hooks", [])):
+    if any(script in h.get("command", "") for e in lst for h in e.get("hooks", [])):
         continue
-    lst.append({"matcher": matcher,
-                "hooks": [{"type": "command", "command": "python3 '%s'" % guard, "timeout": 10}]})
-    added.append(event)
+    entry = {"hooks": [{"type": "command", "command": "python3 '%s'" % script, "timeout": 10}]}
+    if matcher:
+        entry = {"matcher": matcher, **entry}
+    lst.append(entry)
+    label = event + ("/" + matcher if matcher else "")
+    if label not in added:
+        added.append(label)
 json.dump(cfg, open(p, "w"), indent=2); open(p, "a").write("\n")
 print("    " + (", ".join(added) + " wired" if added else "already wired") +
       " (existing hooks preserved, settings.json backed up)")

@@ -185,9 +185,10 @@ and they override the permission allowlist.
 | 12 · `--body-file`, never `--body` | **hook** (blocks) |
 | visual baseline only in its own PR | **hook** (blocks) |
 | tokens not raw values | **hook** (warns on edit) |
+| 14 · ADF-only JIRA content | `scripts/adf.py --validate` before posting |
 | everything else | skill prose + review |
 
-`rules/AGENTS.md` is the always-on layer: copy it to a repo root as `AGENTS.md` or
+`rules/ADF.md` is the canonical JIRA content spec; `rules/AGENTS.md` is the always-on layer: copy it to a repo root as `AGENTS.md` or
 `CLAUDE.md` so the hardest rules are in context every turn, before any skill loads.
 Skills are progressively disclosed; that file is not, which is why it stays under
 50 lines.
@@ -225,7 +226,12 @@ Off switch: `touch ~/.claude/skills/hooks/DISABLED`. See `hooks/README.md`.
     If the bridge is down or its plugin is closed, **halt and say so** — an estimated
     design value is the defect this pipeline exists to prevent. Pixel sampling is a last
     resort for flattened rasters only.
-14. **No identifying values are hardcoded.** Account ids, site hosts, project keys,
+14. **All JIRA content is ADF v3 JSON.** Every description, comment, reply, and subtask
+    body, from every skill, no exceptions. Never wiki markup, HTML, or raw Markdown —
+    all three render as broken literal text. Templates in the skills are Markdown for
+    readability, not the wire format: convert with `scripts/adf.py` and validate before
+    posting. Verdicts open with a coloured panel. See `rules/ADF.md`.
+15. **No identifying values are hardcoded.** Account ids, site hosts, project keys,
     repo owners, emails, and deployed URLs appear only as `{{PLACEHOLDER}}`, resolved
     from `project-config.local.md` at setup time. A skill that cannot resolve one
     **asks the user and never guesses.** See `PROJECT-CONFIG.md`.

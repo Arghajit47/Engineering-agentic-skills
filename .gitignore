@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 project-config.local.md
 *.local.md
+events.jsonl*
+DISABLED

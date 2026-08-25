@@ -6,6 +6,9 @@
 #   ./test-guard.sh
 set -uo pipefail
 
+# Test runs must never contaminate real telemetry.
+export SKILLS_TELEMETRY_OFF=1
+
 GUARD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/guard.py"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

@@ -22,8 +22,19 @@ import sys
 
 PROTECTED = ("main", "master")
 
+# Telemetry is optional: if it is missing or broken the guard still works.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "telemetry"))
+try:
+    from observe import record as _record
+except Exception:
+    def _record(_payload):
+        return None
+
+_CTX = {"repo": None}
+
 
 def die(rule, msg):
+    _record({"event": "block", "rule": rule, "repo": _CTX.get("repo")})
     sys.stderr.write(f"BLOCKED [{rule}]\n{msg}\n")
     sys.exit(2)
 
@@ -151,6 +162,7 @@ def check_edit(path, added):
                 f"default Tailwind breakpoint(s) {', '.join(bps[:4])} — this project defines "
                 "custom Figma frame breakpoints; default variants do not align with the design")
     if notes:
+        _record({"event": "warn", "rule": "design-token-drift", "repo": _CTX.get("repo")})
         sys.stderr.write(
             "DESIGN-TOKEN DRIFT in " + path + "\n  - " + "\n  - ".join(notes) +
             "\n(The edit was applied. Fix it now — this is the recurring defect family "
@@ -172,6 +184,7 @@ def main():
     tool = ev.get("tool_name", "")
     ti = ev.get("tool_input", {}) or {}
     cwd = ev.get("cwd") or None
+    _CTX["repo"] = os.path.basename(os.path.abspath(cwd)) if cwd else None
 
     if tool == "Bash":
         return check_bash(ti.get("command", "") or "", cwd)
