@@ -172,6 +172,28 @@ Three commands per ticket. Everything after `/developer` is wiring.
 Hermes `quality-analyst`; directory `pr-review-and-merge` = Hermes `mr-code-review`. The
 first column above is the **directory** — the thing `Skill(skill="…")` takes.
 
+## Enforcement — which invariants the harness holds
+
+Most invariants below are prose a skill must choose to follow. Six are enforced by
+`hooks/guard.py` at the harness level, so they cannot be missed when context is long —
+and they override the permission allowlist.
+
+| Invariant | Enforced by |
+|---|---|
+| 1 · never push/commit to `main` | **hook** (blocks) |
+| 7 · token separation | **hook** (blocks) |
+| 12 · `--body-file`, never `--body` | **hook** (blocks) |
+| visual baseline only in its own PR | **hook** (blocks) |
+| tokens not raw values | **hook** (warns on edit) |
+| everything else | skill prose + review |
+
+`rules/AGENTS.md` is the always-on layer: copy it to a repo root as `AGENTS.md` or
+`CLAUDE.md` so the hardest rules are in context every turn, before any skill loads.
+Skills are progressively disclosed; that file is not, which is why it stays under
+50 lines.
+
+Off switch: `touch ~/.claude/skills/hooks/DISABLED`. See `hooks/README.md`.
+
 ## Invariants — true across every skill
 
 1. **Never push to `main`.** Branch, PR, explicit approval.

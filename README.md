@@ -4,6 +4,36 @@ A full engineering team's roles, as Claude Code skills. One person plus an agent
 pipeline covering **plan → design → spec → test → build → review → secure → release →
 verify → watch → document → improve**.
 
+## Gates, not suggestions
+
+Most agent setups give a model instructions and hope. Three things here **stop the
+pipeline** rather than advise it:
+
+- **`/security-review` blocks the merge** — application *and* harness security
+- **`/release` blocks QA until the deploy is proven** — a 200 is not proof; the served
+  HTML must carry a token the diff added and lose one it removed
+- **`/test-strategy` blocks implementation until the tests have failed** — a test that
+  never failed has never been shown to test anything
+
+And six rules are enforced **below the model**, by hooks the harness runs:
+
+| Enforced by a hook | Effect |
+|---|---|
+| push or commit to `main` | blocked |
+| dev + reviewer GitHub tokens in one command | blocked |
+| `gh --body` containing a backtick (shell injection) | blocked |
+| `playwright --update-snapshots` | blocked |
+| raw hex or default `lg:`/`xl:` in a component | warned, on the edit |
+
+Skill prose is instruction a model *chooses* to follow. A hook is executed by the
+harness, so it survives a long context — and it **overrides your permission allowlist**:
+`Bash(git push *)` being allowed does not make `git push origin main` allowed.
+
+Hooks are opt-in and the installer asks explicitly (no default — you type `y` or `n`).
+It merges with any hooks you already have and backs up `settings.json` first.
+Off switch: `touch ~/.claude/skills/hooks/DISABLED`.
+See `hooks/README.md` and the 38-case matrix in `hooks/test-guard.sh`.
+
 ## Prerequisites
 
 **Skills only** — nothing but Claude Code (or Hermes). All 18 install and 14 work fully.
@@ -41,6 +71,7 @@ Install:
 ./install.sh                  # skills + setup + offers the Local AI Bridge
 ./install.sh --with-bridge    # install the bridge without being asked
 ./install.sh --no-bridge      # skills only
+./install.sh --with-hooks     # wire the enforcement hooks
 ./install.sh --target hermes  # into ~/.hermes/skills/productivity
 ./install.sh --dry-run        # see what would change
 ./install.sh --config         # where your settings live + current values
@@ -111,6 +142,18 @@ Without the bridge those four skills halt and say so rather than guessing a desi
 the other fourteen are unaffected. The official `plugin:figma` MCP server is the
 alternative read path.
 
+**Enforcement layer** — not skills, but the reason the gates hold:
+
+| Component | What it does |
+|---|---|
+| `hooks/guard.py` | Harness-level rules that **block**: pushing or committing to `main`, mixing the dev and reviewer GitHub tokens, `gh --body` with backticks, updating a visual baseline. Warns on raw hex / default breakpoints in components. Overrides your permission allowlist. |
+| `rules/AGENTS.md` | Always-on rules template. Copy to a repo root as `AGENTS.md`/`CLAUDE.md` — under 50 lines, in context every turn, before any skill loads. |
+
+Skill prose is instruction a model *chooses* to follow; a hook is executed by the
+harness. `./install.sh --with-hooks` wires them, preserving any hooks you already have
+and backing up `settings.json`. Off switch: `touch ~/.claude/skills/hooks/DISABLED`.
+Details and the 38-case regression matrix: `hooks/README.md`, `hooks/test-guard.sh`.
+
 **Dependency and reference** — never invoked as a pipeline step:
 
 | Skill | Command | Owns |
@@ -125,25 +168,17 @@ from their command: `ba` = `/ba`, `qa` = `/quality-analyst`, `pr-review-and-merg
 
 ## The idea
 
-Most agent setups cover build and review and stop. The expensive failures live in the
+Most agent setups cover build and review, then stop. The expensive failures live in the
 gaps: nobody owns coherence across tickets, nobody owns the deploy, nobody looks after
-Done, and nothing removes code. Each skill here closes one of those gaps and **wires
-itself into its neighbours as a gate** — so the pipeline enforces itself rather than
-relying on anyone remembering.
+Done, and nothing removes code.
 
-Three gates carry most of the value:
+Each skill closes one of those gaps and wires itself into its neighbours as a gate, so
+the pipeline enforces itself rather than relying on anyone remembering. `/agent-eval`
+closes the loop: when the same defect shape appears three times, that is a **missing
+gate**, and the fix is a skill edit — not more diligence.
 
-1. **`/security-review` blocks the merge.** Application security *and* harness security
-   — token separation, prompt-injection surfaces where JIRA/Figma/PR text reaches a
-   shell, hook configs, MCP write scope.
-2. **`/release` blocks QA until the deploy is proven.** A 200 is not proof. The served
-   HTML must carry a token the diff added and must not carry one it removed. Without
-   this, QA grades the previous build whenever CI goes red after merge.
-3. **`/test-strategy` blocks implementation until the tests have failed.** A test that
-   never failed has never been shown to test anything.
-
-`/agent-eval` closes the loop: when the same defect shape appears three times, that is
-a **missing gate**, and the fix is a skill edit — not more diligence.
+Every rule here is traceable to something that actually went wrong. If you cannot name
+the incident, the rule does not belong.
 
 ## Configuration — nothing is hardcoded
 
