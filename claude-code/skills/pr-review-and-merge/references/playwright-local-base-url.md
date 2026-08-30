@@ -1,5 +1,17 @@
 # Playwright Pre-Merge Verification: Use a Local Server, Not the Deployed URL
 
+> **Scope — read this before applying the recipe.** This is a **pre-merge** recipe and it
+> is the *only* stage that runs against a local server. It does not contradict the
+> deployed-URL-only gate; it precedes it.
+>
+> | Stage | Target | Why |
+> |---|---|---|
+> | `/pr-review-and-merge` (pre-merge) | **local build of the branch** | the branch is not deployed yet — the deployed site still carries the old build, so it cannot be evidence for this diff |
+> | `/release`, `/quality-analyst`, `/perf-budget`, `/sre` (post-merge) | **deployed URL only — never localhost** | absolute gate; a local run hides missing untracked assets, image optimisation, and font loading |
+>
+> Never cite a local run as QA evidence, and never cite a deployed run as pre-merge
+> evidence for an unmerged branch.
+
 ## Problem
 
 Many test-automation packages hardcode `BASE_URL` to the production deployment in

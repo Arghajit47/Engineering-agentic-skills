@@ -73,4 +73,4 @@ Include in sub-agent context:
 
 - `references/jira-rest-attachment-upload.md` — direct REST fallback when MCP attachment tools fail or use the wrong JIRA identity
 - `references/figma-pixel-sampling.md` — PIL color fallback when vision is unavailable
-- `cached-json-fallback.md` (business-analyst-workflow) — extract from `/tmp/figma_full.json`
+- Figma extraction is **Local AI Bridge only** (`http://localhost:47291`). There is no cached-JSON, `api.figma.com`, or `figma-extractor` fallback — if the bridge is down or unsynced, stop and ask the user to start/sync it.

@@ -41,6 +41,13 @@ for dir in "$SRC"/*/; do
   done
 done
 
+# ---------------------------------------------------------------------------
+# Regenerate the routing index. Templates are strict: a skill must post from
+# its own template, never hand-composed ADF. This index is how a skill finds
+# the right template at the right time. Generated -- never edit TEMPLATES.md.
+# ---------------------------------------------------------------------------
+python3 "$HERE/index.py" "$SKILLS" || { echo "  FAIL  routing index" >&2; failed=$((failed + 1)); }
+
 echo
 echo "$built templates built, $failed failed"
 [ "$failed" -eq 0 ]
