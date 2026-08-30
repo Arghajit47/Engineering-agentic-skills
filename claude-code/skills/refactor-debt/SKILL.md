@@ -50,7 +50,8 @@ in the modern issue view.
 
 Templates are generated from `templates/adf/_src/refactor-debt/*.adf.md` by
 `templates/adf/build.sh` — edit the source and rebuild, never the JSON. Full node spec:
-`rules/ADF.md`.
+`rules/ADF.md`. Which template a skill uses at which gate, for the whole
+pipeline: `templates/TEMPLATES.md` (generated — do not edit by hand).
 
 ## Why this skill exists
 

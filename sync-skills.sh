@@ -17,6 +17,39 @@ if grep -rIlE '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-
 fi
 echo "    clean"
 
+echo "==> Structure checks on $SRC"
+# A reference file no SKILL.md points at is invisible to the agent that needs it.
+# 39 of 113 had drifted that way before this guard existed.
+python3 "$SRC/scripts/refindex.py" --check || {
+  echo "REFUSING TO SYNC: reference index is stale." >&2; exit 1; }
+
+# Templates are strict: every posting skill routes through templates/TEMPLATES.md.
+[ -f "$SRC/templates/TEMPLATES.md" ] || {
+  echo "REFUSING TO SYNC: templates/TEMPLATES.md missing — run templates/adf/build.sh" >&2; exit 1; }
+for md in "$SRC"/*/templates/adf/*.adf.json; do
+  [ -e "$md" ] || continue
+  name="$(basename "$md")"; skill="$(basename "$(dirname "$(dirname "$(dirname "$md")")")")"
+  grep -q "$skill/templates/adf/$name" "$SRC/templates/TEMPLATES.md" \
+    || [ "$name" = "comment.adf.json" ] \
+    || { echo "REFUSING TO SYNC: $skill/$name is not routed in templates/TEMPLATES.md." >&2
+         echo "Add a row to templates/adf/_src/_routing.tsv and re-run templates/adf/build.sh." >&2; exit 1; }
+done
+
+# Figma extraction is Local AI Bridge only. figma-extractor is RETIRED: the token
+# may appear only in the two skills whose job is to forbid it. A file allowlist is
+# used deliberately instead of matching prohibition keywords on the line -- a line
+# can carry both a prohibition word and a usable recipe, which slips a keyword filter.
+FIGMA_OK='^(ba/SKILL\.md|local-ai-bridge/SKILL\.md|local-ai-bridge/references/operational-gotchas\.md)$'
+BADFIG=$(cd "$SRC" && grep -RIl --include='*.md' -i 'figma-extractor' . 2>/dev/null \
+  | sed 's|^\./||' | grep -vE "$FIGMA_OK" || true)
+if [ -n "$BADFIG" ]; then
+  echo "REFUSING TO SYNC: figma-extractor named outside the skills that forbid it:" >&2
+  echo "$BADFIG" | head -5 >&2
+  echo "Figma extraction is Local AI Bridge only; remove the mention." >&2
+  exit 1
+fi
+echo "    reference index current, templates routed, no figma-extractor recipes"
+
 echo "==> Mirroring $SRC -> $DEST"
 mkdir -p "$DEST"
 rsync -a --copy-links --delete \

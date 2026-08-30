@@ -1,0 +1,18 @@
+architect	adr	the epic's Architecture Decision Record, with frozen API/data contracts	before /ba splits an epic
+ba	description	a new Story/Task description (Mode A — authored from Figma)	authoring a new ticket
+ba	bug-description	a Bug authored from measured Figma-vs-deployed deviations (Mode C)	filing one bug on shipped work
+ba	reply	the /ba-reply answer to a developer unblock request	a dev sub-agent is blocked
+developer-agent-ecosystem	execution-plan	the senior dev's execution plan handed to a sub-agent	before dispatching Frontend/Backend/Integration dev
+test-strategy	red-evidence	the test contract plus RED-before-GREEN failing output	after the contract, before implementation
+pr-review-and-merge	review-verdict	the code-review verdict on a PR against its ticket ACs	posting a review, before merge
+security-review	security-verdict	the blocking security verdict (app + agent-harness surface)	inside /pr-review-and-merge, before merge
+release-engineer	release-verification	proof the deploy carries the merge commit, plus the revert path	after merge, before QA
+qa	qa-results	X-Ray test-case results on the QA subtask	posting the QA verdict
+perf-budget	perf-budget	Core Web Vitals / bundle / image measurements against declared budgets	the mandatory sub-gate before the QA verdict
+sre-watch	soak-report	the timed post-deploy soak result on the deployed URL	after Done
+sre-watch	incident	the incident timeline for an "it is live and broken" report	triaging a live incident
+tech-writer	doc-update	changelog / README / doc updates a merged diff invalidated	after /release
+refactor-debt	debt-register	the prioritised tech-debt register	on the refactor cadence, never inside a feature ticket
+eng-manager	sprint-plan	the prioritised sprint recommendation the user approves	sprint planning
+eng-manager	flow-report	cycle time, rework rate, and where tickets stall	flow review
+eng-manager	standup	the board snapshot	daily standup

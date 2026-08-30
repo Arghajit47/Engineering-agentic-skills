@@ -39,3 +39,5 @@ When a console error row appears on the live page, the QA agent must first attri
 
 - In-scope error → FAIL TC-007 with severity High.
 - Out-of-scope error (e.g., RSC prefetch 404 from a global Navbar link to a missing page) → PASS TC-007 with a note naming the originating component/ticket and the failing URLs. Do not fail the section ticket for a missing page it does not own.
+
+
